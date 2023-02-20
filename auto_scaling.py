@@ -18,39 +18,72 @@
 
 import boto3
 
-# create a new CloudWatch client
-cloudwatch = boto3.client('cloudwatch')
+# Set up the client and resource for EC2 and SQS
+ec2_client = boto3.client('ec2')
+ec2_resource = boto3.resource('ec2')
+sqs_client = boto3.client('sqs')
+sqs_resource = boto3.resource('sqs')
 
-# create an alarm for the SQS queue
-response = cloudwatch.put_metric_alarm(
-    AlarmName='queue-size-alarm',
-    ComparisonOperator='GreaterThanThreshold',
-    EvaluationPeriods=1,
-    MetricName='ApproximateNumberOfMessagesVisible',
-    Namespace='AWS/SQS',
-    Period=60,
-    Statistic='Average',
-    Threshold=100,
-    ActionsEnabled=True,
-    AlarmActions=[
-        'arn:aws:sns:us-east-1:123456789012:queue-size-notification',
-    ],
-)
+# Set up the autoscaling group
+asg_client = boto3.client('autoscaling')
+asg_group_name = 'my-autoscaling-group'
+min_instances = 1
+max_instances = 20
 
-# create a new Auto Scaling group
-autoscaling = boto3.client('autoscaling')
+# Set up the SQS queue
+queue_url = 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue'
+queue = sqs_resource.Queue(queue_url)
 
-response = autoscaling.create_auto_scaling_group(
-    AutoScalingGroupName='my-app-instances',
-    LaunchConfigurationName='my-launch-config',
-    MinSize=1,
-    MaxSize=20,
-    DesiredCapacity=1,
-    VPCZoneIdentifier='subnet-12345678',
-    Tags=[
-        {
-            'Key': 'Name',
-            'Value': 'app-instance'
-        },
-    ]
-)
+# Set up the CloudWatch alarms
+alarm_name = 'my-alarm'
+metric_name = 'ApproximateNumberOfMessagesVisible'
+namespace = 'AWS/SQS'
+comparison_operator = 'GreaterThanThreshold'
+threshold = 5
+evaluation_periods = 1
+period = 60
+actions_enabled = True
+autoscaling_policy_name = 'my-scaling-policy'
+
+"""
+Requirement:
+The max scale up number of instances should be 20. If the requests are less than 20, then the number of ec2 instances should be almost the number of requests in the queue.
+However, if the requests are more than 20, then the auto scaling should maintain max count of instances to be 20, it should not exceed that threshold.
+"""
+# Create the CloudWatch alarm and set up the autoscaling policy
+def create_alarm_and_policy():
+    response = None
+    try:
+        response = sqs_client.get_queue_attributes(QueueUrl=queue_url, AttributeNames=['All'])
+    except:
+        pass
+    if response and 'Attributes' in response:
+        queue_size = int(response['Attributes']['ApproximateNumberOfMessages'])
+        print(f"Queue size: {queue_size}")
+        if queue_size > 0:
+            response = asg_client.describe_auto_scaling_groups(AutoScalingGroupNames=[asg_group_name])
+            if response and 'AutoScalingGroups' in response and len(response['AutoScalingGroups']) > 0:
+                current_instances = len(response['AutoScalingGroups'][0]['Instances'])
+                print(f"Current instances: {current_instances}")
+                desired_instances = min(queue_size, max_instances) if queue_size <= max_instances else max_instances
+                print(f"Desired instances: {desired_instances}")
+                if desired_instances != current_instances:
+                    asg_client.set_desired_capacity(AutoScalingGroupName=asg_group_name, DesiredCapacity=desired_instances)
+                    print(f"Set desired capacity to {desired_instances}")
+            if queue_size > threshold:
+                response = asg_client.describe_policies(AutoScalingGroupName=asg_group_name, PolicyNames=[autoscaling_policy_name])
+                if response and 'ScalingPolicies' in response and len(response['ScalingPolicies']) > 0:
+                    asg_client.execute_policy(AutoScalingGroupName=asg_group_name, PolicyName=autoscaling_policy_name)
+                    print(f"Executed scaling policy: {autoscaling_policy_name}")
+                else:
+                    scaling_policy = asg_client.put_scaling_policy(AutoScalingGroupName=asg_group_name, PolicyName=autoscaling_policy_name,
+                                                                     PolicyType='SimpleScaling', AdjustmentType='ChangeInCapacity',
+                                                                     ScalingAdjustment=1, Cooldown=60, MinAdjustmentMagnitude=1)
+                    print(f"Created scaling policy: {autoscaling_policy_name}")
+                    asg_client.put_metric_alarm(AlarmName=alarm_name, ComparisonOperator=comparison_operator,
+                                                EvaluationPeriods=evaluation_periods, MetricName=metric_name, Namespace=namespace,
+                                                Period=period, Statistic='Average', Threshold=threshold,
+                                                ActionsEnabled=actions_enabled, AlarmActions=[scaling_policy['PolicyARN']])
+                    print(f"Created alarm: {alarm_name}")
+
+create_alarm_and_policy()
