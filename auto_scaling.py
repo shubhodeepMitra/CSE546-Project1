@@ -17,6 +17,7 @@
 """
 
 import boto3
+import time
 
 # Set up the client and resource for EC2 and SQS
 ec2_client = boto3.client('ec2')
@@ -50,40 +51,63 @@ Requirement:
 The max scale up number of instances should be 20. If the requests are less than 20, then the number of ec2 instances should be almost the number of requests in the queue.
 However, if the requests are more than 20, then the auto scaling should maintain max count of instances to be 20, it should not exceed that threshold.
 """
-# Create the CloudWatch alarm and set up the autoscaling policy
-def create_alarm_and_policy():
-    response = None
-    try:
-        response = sqs_client.get_queue_attributes(QueueUrl=queue_url, AttributeNames=['All'])
-    except:
-        pass
-    if response and 'Attributes' in response:
-        queue_size = int(response['Attributes']['ApproximateNumberOfMessages'])
-        print(f"Queue size: {queue_size}")
-        if queue_size > 0:
-            response = asg_client.describe_auto_scaling_groups(AutoScalingGroupNames=[asg_group_name])
-            if response and 'AutoScalingGroups' in response and len(response['AutoScalingGroups']) > 0:
-                current_instances = len(response['AutoScalingGroups'][0]['Instances'])
-                print(f"Current instances: {current_instances}")
-                desired_instances = min(queue_size, max_instances) if queue_size <= max_instances else max_instances
-                print(f"Desired instances: {desired_instances}")
-                if desired_instances != current_instances:
-                    asg_client.set_desired_capacity(AutoScalingGroupName=asg_group_name, DesiredCapacity=desired_instances)
-                    print(f"Set desired capacity to {desired_instances}")
-            if queue_size > threshold:
-                response = asg_client.describe_policies(AutoScalingGroupName=asg_group_name, PolicyNames=[autoscaling_policy_name])
-                if response and 'ScalingPolicies' in response and len(response['ScalingPolicies']) > 0:
-                    asg_client.execute_policy(AutoScalingGroupName=asg_group_name, PolicyName=autoscaling_policy_name)
-                    print(f"Executed scaling policy: {autoscaling_policy_name}")
-                else:
-                    scaling_policy = asg_client.put_scaling_policy(AutoScalingGroupName=asg_group_name, PolicyName=autoscaling_policy_name,
-                                                                     PolicyType='SimpleScaling', AdjustmentType='ChangeInCapacity',
-                                                                     ScalingAdjustment=1, Cooldown=60, MinAdjustmentMagnitude=1)
-                    print(f"Created scaling policy: {autoscaling_policy_name}")
-                    asg_client.put_metric_alarm(AlarmName=alarm_name, ComparisonOperator=comparison_operator,
-                                                EvaluationPeriods=evaluation_periods, MetricName=metric_name, Namespace=namespace,
-                                                Period=period, Statistic='Average', Threshold=threshold,
-                                                ActionsEnabled=actions_enabled, AlarmActions=[scaling_policy['PolicyARN']])
-                    print(f"Created alarm: {alarm_name}")
 
-create_alarm_and_policy()
+# Replace with AWS account values
+queue_url = 'https://sqs.us-east-1.amazonaws.com/123456789012/request_queue'
+autoscaling_group_name = 'app-tier-autoscaling-group'
+
+sqs = boto3.client('sqs')
+autoscaling = boto3.client('autoscaling')
+ec2 = boto3.client('ec2')
+
+def get_queue_size(queue_url):
+    response = sqs.get_queue_attributes(
+        QueueUrl=queue_url,
+        AttributeNames=['ApproximateNumberOfMessages']
+    )
+    return int(response['Attributes']['ApproximateNumberOfMessages'])
+
+def get_instance_count():
+    response = autoscaling.describe_auto_scaling_groups(
+        AutoScalingGroupNames=[autoscaling_group_name],
+        MaxRecords=1
+    )
+    return len(response['AutoScalingGroups'][0]['Instances'])
+
+def set_instance_count(count):
+    autoscaling.set_desired_capacity(
+        AutoScalingGroupName=autoscaling_group_name,
+        DesiredCapacity=count
+    )
+
+def scale():
+    queue_size = get_queue_size(queue_url)
+    instance_count = get_instance_count()
+    if queue_size > 0:
+        new_instance_count = min(queue_size, 20)
+        if new_instance_count > instance_count:
+            set_instance_count(new_instance_count)
+    else:
+        if instance_count > 1:
+            set_instance_count(1)
+        elif instance_count == 1:
+            # Check if instance is idle for 10 minutes
+            reservations = ec2.describe_instances(Filters=[
+                {'Name': 'tag:Name', 'Values': ['app-instance*']},
+                {'Name': 'instance-state-name', 'Values': ['running']}
+            ])['Reservations']
+            instance_ids = []
+            for reservation in reservations:
+                for instance in reservation['Instances']:
+                    if (time.time() - instance['LaunchTime'].timestamp()) > 600:
+                        instance_ids.append(instance['InstanceId'])
+            if len(instance_ids) > 0:
+                autoscaling.terminate_instance_in_auto_scaling_group(
+                    InstanceIds=instance_ids,
+                    ShouldDecrementDesiredCapacity=True
+                )
+
+if __name__ == '__main__':
+    while True:
+        scale()
+        time.sleep(60)
