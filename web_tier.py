@@ -9,13 +9,26 @@ import boto3
 from flask import Flask, request, jsonify
 import requests
 import json
+import os
+import pathlib
+import yaml
 
 # Create a new Flask app
 app = Flask(__name__)
 
+# Set up credentialss
+settings_path = pathlib.Path(__file__).parent.parent.parent.absolute() / "settings.yaml"
+with open(settings_path, "r") as infile:
+        CONFIG = yaml.safe_load(infile)
+
+# put some credentials in the environment
+os.environ["AWS_ACCESS_KEY_ID"] = CONFIG["aws_settings"]["AWSAccessKeyID"]
+os.environ["AWS_SECRET_ACCESS_KEY"] = CONFIG["aws_settings"]["AWSSecretAccessKey"]
+os.environ["AWS_DEFAULT_REGION"] = CONFIG["aws_settings"]["AWSDefaultRegion"]
+
 # Set up the AWS clients
-s3 = boto3.client('s3')
-sqs = boto3.resource('sqs')
+s3 = boto3.client('s3', region_name='us-east-1')
+sqs = boto3.resource('sqs', region_name='us-east-1')
 queue_name = 'image-recognition-requests'
 queue_url = sqs.get_queue_by_name(QueueName=queue_name).url
 
@@ -47,4 +60,4 @@ def receive_image():
 
 # Main function to run the Flask app
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=80)
+    app.run(debug=True, host='0.0.0.0', port=8080)
