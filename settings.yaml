@@ -1,9 +1,9 @@
 aws_settings:
-  AWSAccessKeyID: AKIA4K3BM4LMJWN6IGHP
+  AWSAccessKeyID: ****
   AWSDefaultRegion: us-east-1
-  AWSSecretAccessKey: 5aYaHbZmCnnarL5jlsdb65YSvbZi8gOjWY36JYcI
+  AWSSecretAccessKey: ****
   ImageId: ami-0557a15b87f6559cf
   ImageUser: ubuntu
   InstanceType: t2.micro
-  KeyName: smitra27_cc
-  KeyPath: ~/.ssh/smitra27_cc.pem
+  KeyName: ****
+  KeyPath: ~/.ssh/****
