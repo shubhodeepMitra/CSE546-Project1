@@ -17,7 +17,7 @@ import yaml
 app = Flask(__name__)
 
 # Set up credentialss
-settings_path = pathlib.Path(__file__).parent.parent.parent.absolute() / "settings.yaml"
+settings_path = pathlib.Path(__file__).parent.parent.parent.absolute() / "ubuntu/web_tier" / "settings.yaml"
 with open(settings_path, "r") as infile:
         CONFIG = yaml.safe_load(infile)
 
@@ -29,15 +29,15 @@ os.environ["AWS_DEFAULT_REGION"] = CONFIG["aws_settings"]["AWSDefaultRegion"]
 # Set up the AWS clients
 s3 = boto3.client('s3', region_name='us-east-1')
 sqs = boto3.resource('sqs', region_name='us-east-1')
-queue_name = 'image-recognition-requests'
-queue_url = sqs.get_queue_by_name(QueueName=queue_name).url
+request_queue_name = 'requestQueue'
+request_queue_url = sqs.get_queue_by_name(QueueName=request_queue_name).url
 
 # Define the endpoint for the app tier
 app_tier_endpoint = 'http://app-tier-lb-1234567890.us-east-1.elb.amazonaws.com'
 
 # Define the S3 bucket names for inputs and outputs
-input_bucket_name = 'image-recognition-inputs'
-output_bucket_name = 'image-recognition-outputs'
+input_bucket_name = 'inputBucket546'
+output_bucket_name = 'outputBucket546'
 
 # Route for receiving images from users
 @app.route('/image', methods=['POST'])
@@ -46,14 +46,14 @@ def receive_image():
     image_file = request.files['file']
 
     # Generate a unique filename for the image
-    image_filename = str(uuid.uuid4()) + '.jpeg'
+    image_filename = str(image_file.filename) + '.JPEG'
 
     # Upload the image file to the input S3 bucket
     s3.put_object(Bucket=input_bucket_name, Key=image_filename, Body=image_file)
 
     # Send a message to the app tier to request image recognition
     message = {'image_filename': image_filename}
-    sqs_message = sqs.Queue(queue_url).send_message(MessageBody=json.dumps(message))
+    sqs_message = sqs.Queue(request_queue_url).send_message(MessageBody=json.dumps(message))
 
     # Return the message ID as confirmation
     return jsonify({'message_id': sqs_message.id}), 200
