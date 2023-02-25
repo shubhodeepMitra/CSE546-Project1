@@ -24,36 +24,42 @@ os.environ["AWS_ACCESS_KEY_ID"] = CONFIG["aws_settings"]["AWSAccessKeyID"]
 os.environ["AWS_SECRET_ACCESS_KEY"] = CONFIG["aws_settings"]["AWSSecretAccessKey"]
 os.environ["AWS_DEFAULT_REGION"] = CONFIG["aws_settings"]["AWSDefaultRegion"]
 
-sqs = boto3.resource('sqs')
+sqs = boto3.resource('sqs', region_name='us-east-1')
+s3 = boto3.resource('s3', region_name='us-east-1')
+s3_client = boto3.client('s3')
 request_queue = sqs.get_queue_by_name(QueueName='requestQueue')
 response_queue = sqs.get_queue_by_name(QueueName='responseQueue')
 response_queue_url = response_queue.url
-response_bucket = 'outputbucket546'
+input_bucket_name = 'inputbucket546'
+output_bucket_name = 'outputbucket546'
 
 while True:
     # Receive messages from the request queue
-    messages = request_queue.receive_messages(MaxNumberOfMessages=2, WaitTimeSeconds=20)
+    messages = request_queue.receive_messages(MaxNumberOfMessages=2, WaitTimeSeconds=0)
     if messages:
         # Process each message
         for message in messages:
-            image_key = message.body
-            image_name = os.path.splitext(os.path.basename(image_key))[0]
-            response_key = image_name + '.JPEG'
+            print(message.body)
+            message_dict = eval(message.body) # Convert string to dictionary
+            image_name = message_dict['image_filename']
+            print(image_name)
+            input_bucket = s3.Bucket(input_bucket_name)
+            s3.Bucket(input_bucket_name).download_file(image_name, image_name)
 
             # Run the deep learning model on the image
-            subprocess.run(['python3', pathlib.Path(__file__).parent.parent.parent.absolute() / "home/ubuntu/image_classification.py", image_key])
+            subprocess.run(['python3', pathlib.Path(__file__).parent.parent.parent.absolute() / "home/ubuntu/image_classification.py", image_name])
 
             # Read the result from the output file
             with open('output.txt', 'r') as f:
                 result = f.read().strip()
+            
+            print(result)
 
             # Upload the result to S3
-            s3 = boto3.resource('s3')
-            response_object = s3.Object(response_bucket, response_key)
-            response_object.put(Body=result)
+            s3_client.put_object(Bucket=output_bucket_name, Key=str(image_name), Body=result)
 
             # Send a message to the web tier with results from image recognition
-            res_message = {response_key: result}
+            res_message = {str(image_name): result}
             sqs_message = sqs.Queue(response_queue_url).send_message(MessageBody=json.dumps(res_message))
 
             # Delete the message from the queue
