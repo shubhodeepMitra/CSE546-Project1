@@ -10,7 +10,7 @@ This is a project README file. This application includes a web tier, an app tier
 ## Member Tasks
 
 * Ashwin Nair:
-  * Worked on getting app tier code working on a startup of EC2 instance.
+  * Worked on getting app tier code working on a startup of EC2 instance: that is for each new instance created by autoscaling functionality, the app_tier.py is run on boot and listens for messages in the SQS queue.
   * Tried many different alternatives such as trying to use the python-systemd library and modifying init.d as well. Finally got it to work by creating a cron entry using crontab and making a new AMI with the app_tier.py script and settings.yaml files included.
 
 * Shubhodeep Mitra:
