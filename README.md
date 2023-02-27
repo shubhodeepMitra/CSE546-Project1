@@ -1,15 +1,11 @@
 # Project1
-This is a project README file for an application that includes a web tier, an app tier, and a PHP backend server. 
+This is a project README file. This application includes a web tier, an app tier, and a PHP backend server. 
 
 ## Contributors
 
-* Austin Derbique
-* Alexander Pappas
-* Cole Ruter
-
-## To Run Application
-
-To run this code, you should execute "tmux attach -t mytestapp" to create a new terminal window and then run "python web_tier" in that window. You will also need to customize the code to match the specifics of your S3 buckets, SQS queue, and app tier endpoint.
+* Ashwin Nair
+* Shubhodeep Mitra
+* Raghav Aggarwal
 
 ## Member Tasks
 
@@ -40,3 +36,7 @@ To run this code, you should execute "tmux attach -t mytestapp" to create a new 
   * Developed the code for the web_tier to listen to the response Queue and print the result (output message). 
   * Researched methods for implementing Autoscaling. Which is implemented using AWS CloudWatch alarm which is configured to automatically increase or decrease the number of EC2 instances based on the size of the SQS queue.
   * Created project Report
+  
+  ## To Run Application
+
+To run this code, you should execute "tmux attach -t mytestapp" to create a new terminal window and then run "python web_tier" in that window. You will also need to customize the code to match the specifics of your S3 buckets, SQS queue, and app tier endpoint.
