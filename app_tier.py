@@ -7,12 +7,14 @@
         4. Also, replace 'your-response-bucket-name' with the name of the S3 bucket where the recognition results will be stored.
 """
 
+import sys
 import boto3
 import subprocess
 import os
 import json
 import yaml
 import pathlib
+import socket
 
 # Set up credentialss
 settings_path = pathlib.Path(__file__).parent.parent.parent.absolute() / "home/ubuntu/settings.yaml"
@@ -32,6 +34,12 @@ response_queue = sqs.get_queue_by_name(QueueName='responseQueue')
 response_queue_url = response_queue.url
 input_bucket_name = 'inputbucket546'
 output_bucket_name = 'outputbucket546'
+
+#get instance id
+session = boto3.Session(region_name="us-east-1")
+ec2_client = session.client('ec2')
+instance_id = ec2_client.describe_instances()['Reservations'][0]['Instances'][0]['InstanceId']
+print(instance_id)
 
 while True:
     # Receive messages from the request queue
@@ -72,4 +80,6 @@ while True:
 
             # Delete the message from the queue
             message.delete()
-    #ec2_res.instances.filter(InstanceIds=ids).terminate()
+    # ec2_client.terminate_instances(InstanceIds=[instance_id])
+    # print('Instance {} terminated.'.format(instance_id))
+    # sys.exit()
