@@ -15,17 +15,17 @@ import json
 import os
 import pathlib
 import yaml
-from threading import Thread
+from threading import Thread, Semaphore, Barrier
 
 # Create a new Flask app
 app = Flask(__name__)
 
-# Set up credentialss
+# Set up credentials
 settings_path = pathlib.Path(__file__).parent.parent.parent.absolute() / "ubuntu/web_tier" / "settings.yaml"
 with open(settings_path, "r") as infile:
     CONFIG = yaml.safe_load(infile)
 
-# put some credentials in the environment
+# Put some credentials in the environment
 os.environ["AWS_ACCESS_KEY_ID"] = CONFIG["aws_settings"]["AWSAccessKeyID"]
 os.environ["AWS_SECRET_ACCESS_KEY"] = CONFIG["aws_settings"]["AWSSecretAccessKey"]
 os.environ["AWS_DEFAULT_REGION"] = CONFIG["aws_settings"]["AWSDefaultRegion"]
@@ -48,30 +48,32 @@ input_bucket_name = 'inputbucket546'
 output_bucket_name = 'outputbucket546'
 
 results = {}
+AUTO_SCALE = True
 
 def listen_for_results():
-    messages = response_queue.receive_messages()
     while True:
-    # Receive messages from the request queue
+        messages = response_queue.receive_messages()
         if messages:
             # Process each message
             for message in messages:
                 print(message.body)
                 message_dict = eval(message.body) # Convert string to dictionary
-                # Parse the message body as JSON
-                message_body = json.loads(message['Messages'][0]['Body'])
+                fwrite = open('Results.txt', "a+")
+                fwrite.write(str(message.body)+"\n")
+                fwrite.close()
 
                 # Extract the key-value pairs from the message body and add them to the dictionary
-                for key, value in message_body.items():
+                for key, value in message_dict.items():
                     results[key] = value
                 # Delete the message from the queue
-                #message.delete()
+                message.delete()
+            return
 
 # Route for receiving images from users
 @app.route('/image', methods=['POST'])
 def receive_image():
     # Get the image file from the request
-    image_file = request.files['file']
+    image_file = request.files['myfile']
 
     # Generate a unique filename for the image
     image_filename = str(image_file.filename)
@@ -83,8 +85,11 @@ def receive_image():
     message = {'image_filename': image_filename}
     sqs_message = sqs.Queue(request_queue_url).send_message(MessageBody=json.dumps(message))
 
-    listen = Thread(target=listen_for_results)
-    listen.start()
+    if(AUTO_SCALE):
+        #autoscale()
+        AUTO_SCALE = False
+
+    listen_for_results()
 
     # Return the message ID as confirmation
     return json.dumps(results), 200

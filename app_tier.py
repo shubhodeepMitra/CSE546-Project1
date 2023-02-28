@@ -35,7 +35,7 @@ output_bucket_name = 'outputbucket546'
 
 while True:
     # Receive messages from the request queue
-    messages = request_queue.receive_messages(MaxNumberOfMessages=2, WaitTimeSeconds=0)
+    messages = request_queue.receive_messages(MaxNumberOfMessages=5, WaitTimeSeconds=0)
     if messages:
         # Process each message
         for message in messages:
@@ -56,11 +56,20 @@ while True:
             print(result)
 
             # Upload the result to S3
-            s3_client.put_object(Bucket=output_bucket_name, Key=str(image_name), Body=result)
+            file_to_store = '{}_Result.txt'.format(image_name)
+            s3write = open(file_to_store, "w+")
+            s3write.write(result)
+            s3write.close()
+
+            s3_client.upload_file(file_to_store, output_bucket_name, file_to_store)
+            print('uploaded')
 
             # Send a message to the web tier with results from image recognition
-            res_message = {str(image_name): result}
+            res_message = {str(image_name): result.split(',')[1]}
             sqs_message = sqs.Queue(response_queue_url).send_message(MessageBody=json.dumps(res_message))
+
+            print(json.dumps(res_message))
 
             # Delete the message from the queue
             message.delete()
+    #ec2_res.instances.filter(InstanceIds=ids).terminate()
