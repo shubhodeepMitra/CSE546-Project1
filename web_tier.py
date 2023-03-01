@@ -154,6 +154,7 @@ def receive_image():
     sqs_message = sqs.Queue(request_queue_url).send_message(MessageBody=json.dumps(message))
 
     if(auto_scale_flag):
+        # Autoscaled via cloudwatch and ASG
         #autoscale()
         auto_scale_flag = False
 

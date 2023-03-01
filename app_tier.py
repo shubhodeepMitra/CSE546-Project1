@@ -15,6 +15,7 @@ import json
 import yaml
 import pathlib
 import socket
+import time
 
 # Set up credentialss
 settings_path = pathlib.Path(__file__).parent.parent.parent.absolute() / "home/ubuntu/settings.yaml"
@@ -40,11 +41,15 @@ session = boto3.Session(region_name="us-east-1")
 ec2_client = session.client('ec2')
 instance_id = ec2_client.describe_instances()['Reservations'][0]['Instances'][0]['InstanceId']
 print(instance_id)
+init_sleep = True
 
 while True:
     # Receive messages from the request queue
-    messages = request_queue.receive_messages(MaxNumberOfMessages=5, WaitTimeSeconds=0)
+    messages = request_queue.receive_messages(MaxNumberOfMessages=3, WaitTimeSeconds=0)
     if messages:
+        if init_sleep:
+            time.sleep(90)
+            init_sleep = False
         # Process each message
         for message in messages:
             print(message.body)
@@ -80,6 +85,3 @@ while True:
 
             # Delete the message from the queue
             message.delete()
-    # ec2_client.terminate_instances(InstanceIds=[instance_id])
-    # print('Instance {} terminated.'.format(instance_id))
-    # sys.exit()
